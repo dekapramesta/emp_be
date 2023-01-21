@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { AppService } from './app.service';
 import { AuthService } from './auth/auth.service';
-import { Response } from 'express';
+import { response, Response } from 'express';
 import { AuthenticatedGuard } from './auth/authenticated-guard';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { LocalAuthGuard } from './auth/local-auth.guard';
@@ -26,8 +26,15 @@ export class AppController {
 
   @UseGuards(LocalAuthGuard)
   @Post('login')
-  login(@Request() req): any {
-    return this.authService.login(req.user);
+  async login(@Request() req): Promise<any> {
+    try {
+      const data = await this.authService.login(req.user);
+      if (!data)
+        return response.json('pass atau email tidak ditemukan').status(404);
+      return { data: data };
+    } catch (error) {
+      return response.json({ data: error.errors }).status(404);
+    }
   }
 
   @UseGuards(JwtAuthGuard)
@@ -38,10 +45,18 @@ export class AppController {
 
   @Post('register')
   async register(@Body() createUserDto: CreateUserDto, @Res() res: Response) {
-    const saltOrRounds = 12;
-    const hash = await bcrypt.hash(createUserDto.password, saltOrRounds);
-    createUserDto.password = hash;
-    const create = await this.userService.register(createUserDto);
-    return res.json({ msg: 'success', data: createUserDto }).status(201).send();
+    try {
+      const saltOrRounds = 12;
+      const hash = await bcrypt.hash(createUserDto.password, saltOrRounds);
+      createUserDto.password = hash;
+      await this.userService.register(createUserDto);
+      return res
+        .json({ msg: 'success', data: createUserDto })
+        .status(201)
+        .send();
+    } catch (err) {
+      const val = err.errors[Object.keys(err.errors)[0]];
+      return res.json({ message: val.message }).status(403).send();
+    }
   }
 }
